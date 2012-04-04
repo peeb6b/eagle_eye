@@ -1,3 +1,9 @@
+Instead of starting from scratch I decided to fork the Seeborg repository
+from google code.  I'm new at this so if I forgot any license related
+stuff or not giving proper credit please let me know.
+
+Seeborg on google code:  http://code.google.com/p/seeborg/
+
 Some of the goals of this project are to develop a bot which learns from a specified area of input and have it
 generate output on that specific input
 
