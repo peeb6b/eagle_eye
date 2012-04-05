@@ -4,8 +4,7 @@ stuff or not giving proper credit please let me know.
 
 Seeborg on google code:  http://code.google.com/p/seeborg/
 
-Some of the goals of this project are to develop a bot which learns from a specified area of input and have it
-generate output on that specific input
+Some of the goals of this project are to develop a bot which learns from a specified area of input and have it generate output on that specific input
 
 Modular
   -Have different learning algorithms which can be used
@@ -16,8 +15,9 @@ Cross Platform
   -Must be able to compile and run on at least Windows and Linux (I do not own a Mac to develop on unfortunately)
 
 
+Instructions to build eagle_eye:
 
-To build (TO DO):
+
 
 Windows:
 
