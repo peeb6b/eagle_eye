@@ -84,8 +84,8 @@ TGTDIR = ./
 FNAMEIRC = seeborg-irc
 FNAMELINEIN = seeborg-linein
 
-CFCPU = -march=pentium
-CFOPT = -O3 -fomit-frame-pointer -fforce-addr -finline -funroll-loops -fexpensive-optimizations
+#CFCPU = -march=pentium
+#CFOPT = -O3 -fomit-frame-pointer -fforce-addr -finline -funroll-loops -fexpensive-optimizations
 CFUSER = -pthread
 
 #CFDEBUG = -g3
