@@ -2,8 +2,10 @@
 #define __SEEUTIL_H__
 
 #include <stdio.h>
+#include <string.h>
 #include <string>
 #include <vector>
+#include <cstdlib>
 
 using namespace std;
 
