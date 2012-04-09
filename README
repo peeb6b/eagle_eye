@@ -20,5 +20,10 @@ Instructions to build eagle_eye:
 
 
 Windows:
+Currently having issues with VS 2010
+
 
 Linux:
+(Navigate to the proper directory)
+
+make
