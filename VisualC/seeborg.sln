@@ -1,17 +1,11 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 10.00
-# Visual Studio 2008
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "seeborg", "seeborg.vcproj", "{96DC233F-6DE3-444E-8776-42B4A826E7DE}"
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual C++ Express 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "seeborg", "seeborg.vcxproj", "{96DC233F-6DE3-444E-8776-42B4A826E7DE}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "seeborg_linein", "seeborg-linein.vcproj", "{C70C9F01-E7E0-4209-B66D-D463AF5F2F90}"
-	ProjectSection(ProjectDependencies) = postProject
-		{96DC233F-6DE3-444E-8776-42B4A826E7DE} = {96DC233F-6DE3-444E-8776-42B4A826E7DE}
-	EndProjectSection
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "seeborg_linein", "seeborg-linein.vcxproj", "{C70C9F01-E7E0-4209-B66D-D463AF5F2F90}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "seeborg_irc", "seeborg-irc.vcproj", "{445C305C-BF7D-459E-9915-33FC122EDEC7}"
-	ProjectSection(ProjectDependencies) = postProject
-		{96DC233F-6DE3-444E-8776-42B4A826E7DE} = {96DC233F-6DE3-444E-8776-42B4A826E7DE}
-	EndProjectSection
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "seeborg_irc", "seeborg-irc.vcxproj", "{445C305C-BF7D-459E-9915-33FC122EDEC7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
