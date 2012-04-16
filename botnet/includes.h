@@ -102,7 +102,7 @@ void BN_UnsetSigs(bool);
 void BN_UnsetEvents(BN_PInfo I,bool Chat);
 bool BN_CheckForFlood(BN_PFlood,int len);
 void BN_PrintDebug(int Level,char *Txt, ...);
-#ifndef DEBUG
+#ifndef _DEBUG
 #ifdef __unix__
 #define BN_PrintDebug(x,...) //
 #else /* __unix__ */

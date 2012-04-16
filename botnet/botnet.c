@@ -125,6 +125,7 @@ struct BN_threadspecific *BN_getthreadspecific(void)
 bool BN_Connect(BN_PInfo I,const char *Server,const int Port,const int Flags)
 {
   int ret;
+  void* retptr = NULL;
 #ifdef _WIN32
   DWORD son;
   WSADATA wsaData;
@@ -163,8 +164,8 @@ bool BN_Connect(BN_PInfo I,const char *Server,const int Port,const int Flags)
     return true;
   }
 #endif
-  ret = (int)ThreadProc_Connect(I);
-  return (bool)ret;
+  retptr = ThreadProc_Connect(I);
+  return retptr != NULL;
 }
 #ifdef _WIN32
 DWORD WINAPI ThreadProc_Connect(void *Info)

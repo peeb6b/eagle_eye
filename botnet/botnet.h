@@ -33,7 +33,7 @@ typedef unsigned char bool;
 #define false 0
 #define true 1
 
-#define BN_SOCKET_TIMEOUT 300 /* Wait for data up to 5 min... else time out */
+#define BN_SOCKET_TIMEOUT 3000 /* Wait for data up to 5 min... else time out */
 
 #define BN_LOW_PRIORITY      0
 #define BN_HIGH_PRIORITY     1

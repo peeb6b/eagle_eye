@@ -1,3 +1,23 @@
+/*
+    This file is part of SeeBorg.
+	Copyright (C) 2003, 2006 Eugene Bujak.
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
+
+*/
+
 #ifdef __unix__
 #include <unistd.h>
 #include <sys/wait.h>
@@ -12,6 +32,7 @@
 #include <signal.h>
 #include <locale.h>
 #include <ctype.h>
+#include <string.h>
 
 #include "seeborg.h"
 #include "seeborg-irc.h"
@@ -27,235 +48,150 @@ extern "C" {
 // ---------------------------------------------------------------------------
 
 BN_TInfo  Info;
-seeborg_t gSeeBorg;
 bool	  initialized = false;
 bool	  connected = false;
 
-int		  g_argc;
-char**	  g_argv;
-
-#define ABORT_HACK "#abort#"
+#define ABORT_HACK L"#abort#"
 
 
 // Bot Settings
 // ---------------------------------------------------------------------------
-typedef struct ircbotowner_s {
-  string nickname;
-  string hostname;
-} ircbotowner_t;
-
-typedef struct botsettings_s {
-  botsettings_s() {
-	nickname = "SeeBorg";
-	username = "SeeBorg";
-	realname = "I am SeeBorg v" SEEBORGVERSIONSTRING;
-	quitmessage = "Byebye...";
-	replyrate = 1;
-	replyrate_magic = 33;
-	replyrate_mynick = 33;
-	learning = true;
-	speaking = true;
-	joininvites = 2;	// 2: Only react to owners, 1: react to anyone
-
-	// These are default channels
-	channels.insert("#seeborg");
-	channels.insert("#test");
-
-	serverport = 6667;
-	autosaveperiod = 600;
-  }
-
-  // IRC-specific
-  string				server;
-  int					serverport;
-  string				nickname;
-  string				username;
-  string				realname;
-  set<string>			channels;
-  vector<ircbotowner_t>	owners;
-  string				quitmessage;
-
-  // Other settings
-  float					replyrate;
-  int					learning;
+botsettings_s::botsettings_s() {
+  nickname = L"SeeBorg";
+  username = L"SeeBorg";
+  utf8_mbstowstring("I am SeeBorg v" SEEBORGVERSIONSTRING " by Eugene Bujak (Буяк Евгений)", realname);
+  quitmessage = L"Byebye...";
+  ctcpversionstring = L"mIRC v6.2 Khaled Mardam-Bey";
+  replyrate = 1;
+  replyrate_magic = 33;
+  replyrate_mynick = 90;
+  learning = true;
+  speaking = true;
+  joininvites = 2;	// 2: Only react to owners, 1: react to anyone
   
+  // These are default channels
+  channels.push_back(L"#seeborg");
+  channels.push_back(L"#test");
+  
+  serverport = 6667;
+  autosaveperiod = 600;
 
-  int					speaking;
-  int					stealth;		// TODO
-  vector<string>		censored;		// TODO
-  vector<string>		ignorelist;		// TODO
-  int					reply2ignored;	// TODO
-
-  int					joininvites;	// TODO
-  float					replyrate_mynick;
-  float					replyrate_magic;
-  vector<string>		magicwords;
-
-  int					autosaveperiod;
-
-} botsettings_t;
+  tokenizer = tokenizer_init();
+}
+botsettings_s::~botsettings_s() {
+  tokenizer_free(tokenizer);
+}
 
 botsettings_t botsettings;
 
 // Bot Config File
 // ---------------------------------------------------------------------------
-
-typedef struct configsetting_s {
-  char*		configline;
-  char* 	description;
-
-  string*	stringptr;
-  float*	floatptr;
-  int*		intptr;
-} configsetting_t;
-
-static configsetting_t configsettings[] = {
-  {"server", "Address of IRC server", &botsettings.server, NULL, NULL},
-  {"serverport", "Server port", NULL, NULL, &botsettings.serverport},
-
-  {"nickname", "Bot's nickname", &botsettings.nickname, NULL, NULL},
-  {"username", "Bot's username (will show as ~<username>@some.host.com)", &botsettings.username, NULL, NULL},
-  {"realname", "Bot's realname (will show in whois)", &botsettings.realname, NULL, NULL},
-  {"quitmessage", "Bot's quit message", &botsettings.quitmessage, NULL, NULL},
-
-  {NULL, NULL, NULL, NULL, NULL},	// Newline in cfg
-
-  {"replyrate", "Reply rate to all messages (in percent)", NULL, &botsettings.replyrate, NULL},
-  {"replynick", "Reply rate to messages containing bot's nickname (in percent)", NULL, &botsettings.replyrate_mynick, NULL},
-  {"replymagic", "Reply rate to messages containing magic words (in percent)", NULL, &botsettings.replyrate_magic, NULL},
-
-  {NULL, NULL, NULL, NULL, NULL},	// Newline in cfg
-
-  {"speaking", "Controls whether the bot speaks at all (boolean)", NULL, NULL, &botsettings.speaking},
-  {"learning", "Does the bot learn, or just replies (boolean)", NULL, NULL, &botsettings.learning},
-  {"stealth", "Try to emulate a popular IRC client's behaviour (TODO, boolean)", NULL, NULL, &botsettings.stealth},
-  {"joininvites", "Join the channels the bot was invited to (0 - no, 1 - yes, 2 - only by owner)", NULL, NULL, &botsettings.joininvites},
-
-  {NULL, NULL, NULL, NULL, NULL},	// Newline in cfg
-
-  {"autosaveperiod", "Autosave period (in seconds)", NULL, NULL, &botsettings.autosaveperiod},
-
-  {NULL, NULL, NULL, NULL, NULL}
-};
-
-static int numconfigsettings = sizeof(configsettings) / sizeof(configsettings[0]) - 1;
-
-
-//TODO: Restructure code to remove continue statements
 void LoadBotSettings() {
-  string str;
+  wstring str;
   FILE* f = fopen ("seeborg-irc.cfg", "r");
   if (f == NULL) return;
-
-  while (fReadStringLine (f, str))
-  {
-	  trimString(str);
-	  if (str[0] == ';') continue;
-	  if (str[0] == '#') continue;
-	  if (str.empty()) continue;
-
-	  vector<string> cursetting;
-
-	  if (splitString (str, cursetting, "=") < 2) continue;
-
-	  trimString(cursetting[0]);
-	  trimString(cursetting[1]);
-	  if (!strcasecmp(cursetting[0].c_str(), "channels"))	{
-	    vector<string> cursplit;
-	    if (!splitString (cursetting[1], cursplit, " ")) continue;
-	    botsettings.channels.clear();
-	    for (int i = 0, sz = cursplit.size(); i < sz; i++) {
-		  lowerString(cursplit[i]);
-		  botsettings.channels.insert(cursplit[i]);
-	    }
+  
+  while (fReadStringLine (f, str)) {
+	trimString(str, false);
+	// skip comments
+	if (str[0] == L';') continue;
+	if (str[0] == L'#') continue;
+	if (str.empty()) continue;
+	
+	vector<wstring> cursetting;
+	if (splitString (str, cursetting, L"=") < 2) continue;
+	trimString(cursetting[0], false);
+	trimString(cursetting[1], false);
+	
+	// Owner list, special case for parsing
+	if (!wcscasecmp(cursetting[0].c_str(), L"owners")) {
+	  vector<wstring> cursplit;
+	  splitString(cursetting[1], cursplit);
+	  botsettings.owners.clear();
+	  for (int i = 0, sz = cursplit.size(); i < sz; i++) {
+		ircbotowner_t ircbotowner;
+		ircbotowner.nickname = cursplit[i];
+		botsettings.owners.push_back(ircbotowner);
 	  }
+	  continue;
+	}
 
-	  if (!strcasecmp(cursetting[0].c_str(), "owners"))	{
-	    vector<string> cursplit;
-	    if (!splitString (cursetting[1], cursplit, " ")) continue;
-	    botsettings.owners.clear();
-	    for (int i = 0, sz = cursplit.size(); i < sz; i++) {
-		  ircbotowner_t	ircbotowner;
-		  ircbotowner.nickname = cursplit[i];
-		  botsettings.owners.push_back(ircbotowner);
-	    }
+	// Go through non-special entries
+	for (int i = 0; i < numconfigsettings; i++) {
+	  const configsetting_t* s = &configsettings[i];
+	  if (s->configline == NULL) continue;
+	  if (!wcscasecmp(s->configline, cursetting[0].c_str())) {
+		if (s->stringptr != NULL) {
+		  *s->stringptr = cursetting[1];
+		}
+		if (s->floatptr != NULL) {
+		  *s->floatptr = (float)wcstod(cursetting[1].c_str(), NULL);
+		}
+		if (s->intptr != NULL) {
+		  *s->intptr = wcstol(cursetting[1].c_str(), NULL, 10);
+		}
+		if (s->stringvectorptr != NULL) {
+		  s->stringvectorptr->clear();
+		  splitString(cursetting[1], *(s->stringvectorptr));
+		}
+		break;
 	  }
-
-	  if (!strcasecmp(cursetting[0].c_str(), "magicwords"))	{
-	    vector<string> cursplit;
-	    if (!splitString (cursetting[1], cursplit, " ")) continue;
-	    botsettings.magicwords.clear();
-	    for (int i = 0, sz = cursplit.size(); i < sz; i++) {
-		  botsettings.magicwords.push_back(cursplit[i]);
-	    }
-	  }
-
-	  for (int i = 0; i < numconfigsettings; i++) {
-	    configsetting_t* s = &configsettings[i];
-	    if (s->configline == NULL) continue;
-	    if (!strcasecmp(s->configline, cursetting[0].c_str())) {
-		  if (s->stringptr != NULL) {
-		    *s->stringptr = cursetting[1];
-		  } else if (s->floatptr != NULL) {
-		    *s->floatptr = atof(cursetting[1].c_str());
-		  } else if (s->intptr != NULL) {
-		    *s->intptr = atoi(cursetting[1].c_str());
-		  }
-		  break;
-	    }
-	  }
+	}
   }
   fclose(f);
 }
 
 void SaveBotSettings() {
-  FILE* f = fopen ("seeborg-irc.cfg", "w");
-  //  if (f == NULL) return;
-
-  fprintf (f, "; SeeBorg " SEEBORGVERSIONSTRING " settings file\n; Lines beginning with ; or # are treated as comments\n\n\n");
+  FILE* f;
   int i, sz;
+  utf8writer_t *utf8writer = utf8writer_init();
+  if (utf8writer == NULL) {
+	// TODO: write an error and warning that settings couldn't be saved
+	return;
+  }
+  
+  f = fopen ("seeborg-irc.cfg", "w");
+  if (f == NULL) {
+	// TODO: write an error and warning that settings couldn't be saved
+	return; 
+  }
+  
+  fprintf (f, 
+	"; SeeBorg " SEEBORGVERSIONSTRING " settings file"
+	"; Lines beginning with ; or # are treated as comments\n\n\n");
 
+  // Go through single-entry settings
   for (i = 0; i < numconfigsettings; i++) {
-	configsetting_t* s = &configsettings[i];
+	const configsetting_t* s = &configsettings[i];
 	if (s->configline == NULL) {
 	  fprintf (f, "\n\n");
 	  continue;
 	}
 	
-	fprintf (f, "; %s\n", s->description);
+	utf8writer_write(utf8writer, f, s->description, "; %s\n");
+	utf8writer_write(utf8writer, f, s->configline, "%s = ");
+	
 	if (s->stringptr != NULL) {
-	  fprintf (f, "%s = %s\n", s->configline, (*s->stringptr).c_str());
+	  utf8writer_write(utf8writer, f, (*s->stringptr).c_str(), "%s\n");
 	} else if (s->floatptr != NULL) {
-	  fprintf (f, "%s = %.2f\n", s->configline, *s->floatptr);
+	  fprintf (f, "%.2f\n", *s->floatptr);
 	} else if (s->intptr != NULL) {
-	  fprintf (f, "%s = %i\n", s->configline, *s->intptr);
+	  fprintf (f, "%i\n", *s->intptr);
+	} else if (s->stringvectorptr != NULL) {
+	  wstring jointstring = joinString(*(s->stringvectorptr));
+	  utf8writer_write(utf8writer, f, jointstring.c_str(), "%s\n");
 	}
   }
-
-  fprintf (f, "; Channel list to join to\n");
-  fprintf (f, "channels =");
-
-  set<string>::iterator it = botsettings.channels.begin();
-  for (; it != botsettings.channels.end(); ++it) {
-	fprintf (f, " %s", (*it).c_str());
-  }
-  fprintf (f, "\n");
-
-  fprintf (f, "; Magic word list\n");
-  fprintf (f, "magicwords =");
-  for (i = 0, sz = botsettings.magicwords.size(); i < sz; i++) {
-	fprintf (f, " %s", botsettings.magicwords[i].c_str());
-  }
-  fprintf (f, "\n");
-
+  
+  // Write owner list
   fprintf (f, "; Owner list (nicknames)\n");
   fprintf (f, "owners =");
   for (i = 0, sz = botsettings.owners.size(); i < sz; i++) {
-	fprintf (f, " %s", botsettings.owners[i].nickname.c_str());
+	utf8writer_write(utf8writer, f, botsettings.owners[i].nickname.c_str(), " %s");
   }
   fprintf (f, "\n");
-
-
+  
+  
   fclose(f);
 }
 
@@ -263,15 +199,20 @@ void SaveBotSettings() {
 // ---------------------------------------------------------------------------
 void checkOwners(const char who[]) {
   char	hostname[4096];
-  char  nickname[4096];
+  char	nickname[4096];
+  wstring hostnamewc;
+  wstring nicknamewc;
+  
   BN_ExtractHost(who, hostname, sizeof(hostname));
   BN_ExtractNick(who, nickname, sizeof(nickname));
-
+  utf8_mbstowstring(hostname, hostnamewc);
+  utf8_mbstowstring(nickname, nicknamewc);
+  
   for (int i = 0, sz = botsettings.owners.size(); i < sz; i++) {
 	if (botsettings.owners[i].hostname.empty()) {
-	  if (!strcasecmp(nickname, botsettings.owners[i].nickname.c_str())) {
-		botsettings.owners[i].hostname = hostname;
-		printf ("Locked owner '%s' to '%s'\n", nickname, hostname);
+	  if (!wcscasecmp(nicknamewc.c_str(), botsettings.owners[i].nickname.c_str())) {
+		botsettings.owners[i].hostname = hostnamewc;
+		see_printstring(stdout, L"Locked owner '%ls' to '%ls'\n", nicknamewc.c_str(), hostnamewc.c_str());
 		return;
 	  }
 	}
@@ -281,406 +222,591 @@ void checkOwners(const char who[]) {
 bool isOwner(const char who[]) {
   if (botsettings.owners.empty()) return false;
   char	hostname[4096];
-  char  nickname[4096];
-
+  char	nickname[4096];
+  wstring hostnamewc;
+  wstring nicknamewc;
+  
   BN_ExtractHost(who, hostname, sizeof(hostname));
   BN_ExtractNick(who, nickname, sizeof(nickname));
-
+  utf8_mbstowstring(hostname, hostnamewc);
+  utf8_mbstowstring(nickname, nicknamewc);
+  
   for (int i = 0, sz = botsettings.owners.size(); i < sz; i++) {
-	  if (!strcasecmp(hostname, botsettings.owners[i].hostname.c_str())) {
-		  if (!strcasecmp(nickname, botsettings.owners[i].nickname.c_str())) {
-			  return true;
-		  }
+	if (!wcscasecmp(hostnamewc.c_str(), botsettings.owners[i].hostname.c_str())) {
+	  if (!wcscasecmp(nicknamewc.c_str(), botsettings.owners[i].nickname.c_str())) {
+		return true;
 	  }
+	}
   }
   return false;
 }
 
-
-string ProcessMessage(BN_PInfo I, const char who[], const char msg[], bool replying = false) {
-  char* message = strdup(msg);
+// TODO: make sure msg will always be lowercase to avoid copy operation inside function
+bool checkReplying(const vector<wstring> *keylist, const float chance, const wstring &msg) {
+  wstring message = msg;
   lowerString(message);
-  string stdmessage = message;
-  free (message);
+  bool returnval = false;
+  bool throwdice = false;
+  if (chance <= 0) return returnval;
 
-  checkOwners(who);
-
-  if (stdmessage[0] == '!') {
-	string stdcmdreply;
-	stdcmdreply = ircParseCommands(stdmessage, who);
-	if (stdcmdreply == ABORT_HACK) {
-	  return "";
-	}
-
-	if (stdcmdreply != "") {
-	  return stdcmdreply;
-	} else {
-	  stdcmdreply = gSeeBorg.ParseCommands(stdmessage);
-	  if (stdcmdreply == ABORT_HACK) {
-		return "";
-	  }
-	  if (stdcmdreply != "") {
-		return stdcmdreply;
+  if (keylist == NULL) throwdice = true;
+  else {
+	size_t sz = keylist->size();
+	for (size_t i = 0; i < sz; i++) {
+	  wstring curword = (*keylist)[i];
+	  lowerString(curword);
+	  size_t pos = message.find(curword);
+	  if (pos != message.npos) {
+		throwdice = true;
+		break;
 	  }
 	}
+  }
 
-	return "";
+  if (throwdice) {
+	if (randFloat(0, 100) < chance) returnval = true;
   }
 
 
-  trimString(stdmessage);
+  return returnval;
+}
+
+wstring ProcessMessage(BN_PInfo I, const char who[], const wstring &msg, bool replying = false) {
+  wstring replystring;
+  checkOwners(who);
+  wstring message = msg;
+  lowerString(message);
+
+  if (message[0] == L'!') {
+	// Parse commands
+	replystring = ircParseCommands(msg, who);
+	if (replystring == ABORT_HACK) return L"";
+
+	if (replystring != L"") {
+	  return replystring;
+	} else {
+	  // Try seeborg's core commands
+	  replystring = gSeeBorg.ParseCommands(msg);
+	  if (replystring == ABORT_HACK) return L"";
+	  if (replystring != L"") return replystring;
+	}
+
+	return L"";
+  }
 
   // Ignore quotes
-  if (isdigit(stdmessage[0])) return "";
-  if (stdmessage[0] == '<') return "";
-  if (stdmessage[0] == '[') return "";
+  if (message[0] == L'<') return L"";
+  if (message[0] == L'[') return L"";
 
-  if (randFloat(0, 99) < botsettings.replyrate) {
-	replying = true;
-  }
-
-  if ((!replying) && (botsettings.replyrate_magic > 0)) {
-	int sz = botsettings.magicwords.size();
-	for (int i = 0; i < sz; i++) {
-	  if (strstr(stdmessage.c_str(), botsettings.magicwords[i].c_str()) != NULL) {
-		if (randFloat(0, 99) < botsettings.replyrate_magic) replying = true;
-		else break;
-	  }
+  if (botsettings.speaking) {
+	if (!replying) replying = checkReplying(NULL, botsettings.replyrate, message);
+	if (!replying) replying = checkReplying(&botsettings.magicwords, botsettings.replyrate_magic, message);
+	if (!replying) {
+	  vector<wstring> nicknames = botsettings.botakas;
+	  wstring nickname;
+	  utf8_mbstowstring(I->Nick, nickname);
+	  nicknames.push_back(nickname);
+	  
+	  replying = checkReplying(&nicknames, botsettings.replyrate_mynick, message);
 	}
   }
-  if ((!replying) && (botsettings.replyrate_mynick > 0)) {
-	char* nickname = strdup(I->Nick);
-	lowerString(nickname);
-	if (strstr(stdmessage.c_str(), nickname) != NULL) {
-	  if (randFloat(0, 99) < botsettings.replyrate_mynick) replying = true;
-	}
-	free(nickname);
+	
+  if (replying) {
+	replystring = gSeeBorg.Reply(message);
   }
 
-  string replystring;
-
-  if ((replying) && (botsettings.speaking)) {
-    replystring = gSeeBorg.Reply(stdmessage);
-  }
-
-  if (botsettings.learning) gSeeBorg.Learn(stdmessage);
-
+  if (botsettings.learning) gSeeBorg.Learn(message);
   return replystring;
 }
 
 
 // BotNet callback functions
 // ---------------------------------------------------------------------------
+void ProcOnError(BN_PInfo I, int errnum) {
+  see_printstring(stderr, L"Error from botnet: %i\n", errnum);
+//  perror("Error from botnet");
+}
 void ProcOnConnected(BN_PInfo I, const char HostName[]) {
-  printf("Connected to %s...\n", HostName);
+  char* utf8nickname = utf8_wstringtombs(botsettings.nickname);
+  char* utf8username = utf8_wstringtombs(botsettings.username);
+  char* utf8realname = utf8_wstringtombs(botsettings.realname);
+
+  see_printstring(stdout, L"Connected to %hs...\n", HostName);
   BN_EnableFloodProtection(I, 1000, 1000, 60);
   connected = true;
-  BN_Register(I, botsettings.nickname.c_str(), botsettings.username.c_str(), botsettings.realname.c_str());
+  BN_Register(I, utf8nickname, utf8username, utf8realname);
+
+  safe_free (utf8realname);
+  safe_free (utf8username);
+  safe_free (utf8nickname);
 }
 
 
 void ProcOnRegistered(BN_PInfo I) {
-  printf ("Registered...\n");
-  set<string>::iterator it = botsettings.channels.begin();
+  see_printstring(stdout, L"Registered...\n");
+  vector<wstring>::iterator it = botsettings.channels.begin();
   for (; it != botsettings.channels.end(); ++it) {
-	printf ("Joining %s...\n", (*it).c_str());
-	BN_SendJoinMessage (I, (*it).c_str(), NULL);
+	char* utf8channel = utf8_wstringtombs(*it);
+	see_printstring(stdout, L"Joining %ls...\n", (*it).c_str());
+	BN_SendJoinMessage (I, utf8channel, NULL);
+	safe_free(utf8channel);
   }
 }
-
-// returned string is freed then, so we malloc() the return string each call
-char *ProcOnCTCP(BN_PInfo I,const char Who[],const char Whom[],const char Type[]) {
-  char  nickname[4096];
-  BN_ExtractNick(Who, nickname, sizeof(nickname));
-  printf ("CTCP %s query by %s for %s\n", Type, nickname, Whom);
-
-  char  replystring[4096];
-  if (!strcasecmp(Type, "VERSION")) {
-	  sprintf (replystring, "mIRC32 v5.7 K.Mardam-Bey");
-  } else sprintf (replystring, "Forget about it");
-
-  return strdup(replystring);
-}
-
-
 void ProcOnPingPong(BN_PInfo I) {
   static time_t oldtime = time(NULL);
   if (oldtime + botsettings.autosaveperiod < time(NULL)) {
 	oldtime = time(NULL);
 	SaveBotSettings();
-    gSeeBorg.SaveSettings();
+	gSeeBorg.SaveSettings();
   }
 }
-
 // ---
-
 void ProcOnInvite(BN_PInfo I,const char Chan[],const char Who[],const char Whom[]) {
-  char  nickname[4096];
-  BN_ExtractNick(Who, nickname, sizeof(nickname));
-  printf ("Received invitation to %s by %s\n", Chan, nickname);
+  char  tempnick[4096];
+  BN_ExtractNick(Who, tempnick, sizeof(tempnick));
+  wstring nickname, channel;
+  utf8_mbstowstring(tempnick, nickname);
+  utf8_mbstowstring(Chan, channel);
 
-  if (botsettings.joininvites) {
-	if (botsettings.joininvites != 1) {
-	  // Check if the invite is sent by owner
-	  if (!isOwner(Who)) return;
-	}
+  see_printstring(stdout, L"Received invitation to %ls by %ls\n", channel.c_str(), nickname.c_str());
+
+  bool isowner = isOwner(Who);
+  if (botsettings.joininvites == 0) return;
+  if ((botsettings.joininvites > 1) && (!isowner)) return;
+
+  BN_SendJoinMessage (I, Chan, NULL);
+}
+
+void ProcOnKick(BN_PInfo I, const char Chan[], const char Who[], const char Whom[], const char Msg[]) {
+  char  tempnick[4096];
+  BN_ExtractNick(Who, tempnick, sizeof(tempnick));
+  wstring nickname, channel, whom, message;
+  utf8_mbstowstring(tempnick, nickname);
+  utf8_mbstowstring(Chan, channel);
+  utf8_mbstowstring(Whom, whom);
+  utf8_mbstowstring(Msg, message);
+  see_printstring(stdout, L"(%ls) * %ls has been kicked from %ls by %ls [%ls]\n", 
+	channel.c_str(), whom.c_str(), channel.c_str(), nickname.c_str(), message.c_str());
+  
+  if (strstr(Whom, I->Nick) != NULL) {
+	// we were kicked, try to rejoin
 	BN_SendJoinMessage (I, Chan, NULL);
   }
 }
 
 
-void ProcOnKick(BN_PInfo I,const char Chan[],const char Who[],const char Whom[],const char Msg[]) {
-  char  nickname[4096];
-  BN_ExtractNick(Who, nickname, sizeof(nickname));
-  printf ("(%s) * %s has been kicked from %s by %s [%s]\n", Chan, Whom, Chan, nickname, Msg);
+void ProcOnPrivateTalk(BN_PInfo I, const char Who[], const char Whom[], const char Msg[]) {
+  char  tempnick[4096];
+  BN_ExtractNick(Who, tempnick, sizeof(tempnick));
+  wstring nickname, whom, message;
+  utf8_mbstowstring(tempnick, nickname);
+  utf8_mbstowstring(Whom, whom);
+  utf8_mbstowstring(Msg, message);
+  see_printstring(stdout, L"%ls: %ls\n", nickname.c_str(), message.c_str());
 
-  if (strstr(Whom, I->Nick) != NULL) {
-    BN_SendJoinMessage (I, Chan, NULL);
-  }
-}
-
-
-void ProcOnPrivateTalk(BN_PInfo I,const char Who[],const char Whom[],const char Msg[]) {
-  char  nickname[4096];
-  BN_ExtractNick(Who, nickname, sizeof(nickname));
-  //  printf("%s -> %s: %s\n", nickname, Whom, Msg);
-  printf ("%s: %s\n", nickname, Msg);
-
-  string reply = ProcessMessage(I, Who, Msg, true);
+  wstring reply = ProcessMessage(I, Who, message, true);
 
   if (!reply.empty()) {
-	  vector<string> curlines;
-	  splitString(reply, curlines, "\n");
-	  for (int i = 0, sz = curlines.size(); i < sz; i++) {
-		  printf("%s -> %s: %s\n", Whom, nickname, reply.c_str());
-		  BN_SendPrivateMessage(I, nickname, curlines[i].c_str());
-	  }
+	vector<wstring> curlines;
+	splitString(reply, curlines, L"\n");
+	for (size_t i = 0, sz = curlines.size(); i < sz; i++) {
+	  char* utf8line = utf8_wstringtombs(curlines[i]);
+	  see_printstring(stdout, L"%ls -> %ls: %ls\n", whom.c_str(), nickname.c_str(), curlines[i].c_str());
+	  BN_SendPrivateMessage(I, tempnick, utf8line);
+	  safe_free (utf8line);
+	}
   }
 }
 
 
 void ProcOnChannelTalk(BN_PInfo I,const char Chan[],const char Who[],const char Msg[]) {
-  char  nickname[4096];
-  BN_ExtractNick(Who, nickname, sizeof(nickname));
-  printf ("(%s) <%s> %s\n", Chan, nickname, Msg);
+  char  tempnick[4096];
+  BN_ExtractNick(Who, tempnick, sizeof(tempnick));
+  wstring nickname, channel, mynick, message;
+  utf8_mbstowstring(tempnick, nickname);
+  utf8_mbstowstring(Chan, channel);
+  utf8_mbstowstring(Msg, message);
 
-  string reply = ProcessMessage(I, Who, Msg);
-
+  see_printstring(stdout, L"(%ls) <%ls> %ls\n", channel.c_str(), nickname.c_str(), message.c_str());
+  
+  // Process incoming message, acquire reply
+  wstring reply = ProcessMessage(I, Who, message);
+  
+  // if there's reply, send it
   if (!reply.empty()) {
-	  vector<string> curlines;
-	  splitString(reply, curlines, "\n");
-	  for (int i = 0, sz = curlines.size(); i < sz; i++) {
-		  printf ("(%s) <%s> %s\n", Chan, I->Nick, reply.c_str());
-		  BN_SendChannelMessage(I, Chan, curlines[i].c_str());
+	vector<wstring> curlines;
+	utf8_mbstowstring(I->Nick, mynick);
+	splitString(reply, curlines, L"\n");
+	for (size_t i = 0, sz = curlines.size(); i < sz; i++) {
+	  bool beginswithnickname = false;
+	  vector<wstring> nicknames = botsettings.botakas;
+	  nicknames.push_back(mynick);
+	  size_t nnsz = nicknames.size();
+	  for (size_t j = 0; j < nnsz; j++) {
+		if (!wcsncasecmp(nicknames[j].c_str(), curlines[i].c_str(), nicknames[j].length())) {
+		  beginswithnickname = true;
+		  break;
+		}
 	  }
+	  
+	  // TODO: what a mess, clean it up!
+	  if (!beginswithnickname) {
+		char* utf8line = utf8_wstringtombs(curlines[i]);
+		see_printstring(stdout, L"(%ls) <%ls> %ls\n", channel.c_str(), mynick.c_str(), curlines[i].c_str());
+		BN_SendChannelMessage(I, Chan, utf8line);
+		safe_free (utf8line);
+	  } else {
+		vector<wstring> words;
+		splitString(curlines[i], words);
+		words[0] = nickname;
+		lowerString(words[0]);
+		curlines[i] = joinString(words);
+		trimString(curlines[i], false);
+		char* utf8line = utf8_wstringtombs(curlines[i]);
+		see_printstring(stdout, L"(%ls) <%ls> %ls\n", channel.c_str(), mynick.c_str(), curlines[i].c_str());
+		BN_SendChannelMessage(I, Chan, utf8line);
+		safe_free (utf8line);
+	  }
+	}
   }
 }
 
 
 void ProcOnAction(BN_PInfo I,const char Chan[],const char Who[],const char Msg[]) {
-  char  nickname[4096];
-  BN_ExtractNick(Who, nickname, sizeof(nickname));
-  printf ("(%s) * %s %s\n", Chan, nickname, Msg);
+  char  tempnick[4096];
+  BN_ExtractNick(Who, tempnick, sizeof(tempnick));
+  wstring nickname, channel, action, mynick;
+  utf8_mbstowstring(tempnick, nickname);
+  utf8_mbstowstring(Chan, channel);
+  utf8_mbstowstring(Msg, action);
+  see_printstring(stdout, L"(%ls) * %ls %ls\n", channel.c_str(), nickname.c_str(), action.c_str());
 
-  if (botsettings.learning) {
-	  string stdstr;
-	  stdstr = nickname;
-	  stdstr += " ";
-	  stdstr += Msg;
-	  gSeeBorg.Learn(stdstr);
+  wstring message = nickname;
+  message += L" ";
+  message += action;
+
+  wstring reply = ProcessMessage(I, Who, message);
+
+  if (!reply.empty()) {
+	vector<wstring> curlines;
+	utf8_mbstowstring(I->Nick, mynick);
+	splitString(reply, curlines, L"\n");
+	for (size_t i = 0, sz = curlines.size(); i < sz; i++) {
+	  bool beginswithnickname = false;
+	  vector<wstring> nicknames = botsettings.botakas;
+	  nicknames.push_back(mynick);
+	  size_t nnsz = nicknames.size();
+	  for (size_t j = 0; j < nnsz; j++) {
+		if (!wcsncasecmp(nicknames[j].c_str(), curlines[i].c_str(), nicknames[j].length())) {
+		  beginswithnickname = true;
+		  break;
+		}
+	  }
+	  
+	  // TODO: what a mess, clean it up!
+	  if (!beginswithnickname) {
+		char* utf8line = utf8_wstringtombs(curlines[i]);
+		see_printstring(stdout, L"(%ls) <%ls> %ls\n", channel.c_str(), mynick.c_str(), curlines[i].c_str());
+		BN_SendChannelMessage(I, Chan, utf8line);
+		safe_free (utf8line);
+	  } else {
+		vector<wstring> words;
+		splitString(curlines[i], words);
+		words[0] = nickname;
+		lowerString(words[0]);
+		curlines[i] = joinString(words);
+		trimString(curlines[i], false);
+		char* utf8line = utf8_wstringtombs(curlines[i]);
+		see_printstring(stdout, L"(%ls) <%ls> %ls\n", channel.c_str(), mynick.c_str(), curlines[i].c_str());
+		BN_SendChannelMessage(I, Chan, utf8line);
+		safe_free (utf8line);
+	  }
+	}
   }
-
 }
 
 
 void ProcOnJoin (BN_PInfo I, const char Chan[],const char Who[]) {
-  char  nickname[4096];
-  char  hostname[4096];
-  char  username[4096];
-  BN_ExtractNick(Who, nickname, sizeof(nickname));
-  BN_ExtractHost(Who, hostname, sizeof(hostname));
-  BN_ExtractExactUserName(Who, username, sizeof(username));
+  char  tempnick[4096];
+  char  temphost[4096];
+  char  tempuser[4096];
+  BN_ExtractNick(Who, tempnick, sizeof(tempnick));
+  BN_ExtractHost(Who, temphost, sizeof(temphost));
+  BN_ExtractExactUserName(Who, tempuser, sizeof(tempuser));
 
-  printf ("(%s) %s (%s@%s) has joined the channel\n", Chan, nickname, username, hostname);
+  wstring nickname, hostname, username, channel, mynick;
+  utf8_mbstowstring(tempnick, nickname);
+  utf8_mbstowstring(temphost, hostname);
+  utf8_mbstowstring(tempuser, username);
+  utf8_mbstowstring(Chan, channel);
+  
+  see_printstring(stdout, L"(%ls) %ls (%ls@%ls) has joined the channel\n", 
+	channel.c_str(), nickname.c_str(), username.c_str(), hostname.c_str());
+  
+  wstring reply = ProcessMessage(I, Who, nickname);
 
-  string reply = ProcessMessage(I, Who, nickname);
   if (!reply.empty()) {
-	  vector<string> curlines;
-	  splitString(reply, curlines, "\n");
-	  for (int i = 0, sz = curlines.size(); i < sz; i++) {
-		  printf ("(%s) %s: %s\n", Chan, I->Nick, reply.c_str());
-		  BN_SendChannelMessage(I, Chan, curlines[i].c_str());
-	  }
+	vector<wstring> curlines;
+	splitString(reply, curlines, L"\n");
+	utf8_mbstowstring(I->Nick, mynick);
+	for (size_t i = 0, sz = curlines.size(); i < sz; i++) {
+	  char* utf8line = utf8_wstringtombs(curlines[i]);
+	  see_printstring(stdout, L"(%ls) %ls: %ls\n", 
+		channel.c_str(), mynick.c_str(), curlines[i].c_str());
+	  BN_SendChannelMessage(I, Chan, utf8line);
+	  safe_free(utf8line);
+	}
   }
 }
 
 
 void ProcOnPart (BN_PInfo I, const char Chan[],const char Who[], const char Msg[]) {
-  char  nickname[4096];
-  char  hostname[4096];
-  char  username[4096];
-  BN_ExtractNick(Who, nickname, sizeof(nickname));
-  BN_ExtractHost(Who, hostname, sizeof(hostname));
-  BN_ExtractExactUserName(Who, username, sizeof(username));
+  char  tempnick[4096];
+  char  temphost[4096];
+  char  tempuser[4096];
+  BN_ExtractNick(Who, tempnick, sizeof(tempnick));
+  BN_ExtractHost(Who, temphost, sizeof(temphost));
+  BN_ExtractExactUserName(Who, tempuser, sizeof(tempuser));
 
-  printf ("(%s) %s (%s@%s) has left the channel (%s)\n", Chan, nickname, username, hostname, Msg);
-  string reply = ProcessMessage(I, Who, nickname);
+  wstring nickname, hostname, username, channel, mynick, message;
+  utf8_mbstowstring(tempnick, nickname);
+  utf8_mbstowstring(temphost, hostname);
+  utf8_mbstowstring(tempuser, username);
+  utf8_mbstowstring(Chan, channel);
+  utf8_mbstowstring(Msg, message);
+  
+  see_printstring(stdout, L"(%ls) %ls (%ls@%ls) has left the channel (%ls)\n", 
+	channel.c_str(), nickname.c_str(), username.c_str(), hostname.c_str(), message.c_str());
+
+  wstring reply = ProcessMessage(I, Who, nickname);
+
   if (!reply.empty()) {
-	  vector<string> curlines;
-	  splitString(reply, curlines, "\n");
-	  for (int i = 0, sz = curlines.size(); i < sz; i++) {
-		  printf ("(%s) %s: %s\n", Chan, I->Nick, reply.c_str());
-		  BN_SendChannelMessage(I, Chan, curlines[i].c_str());
-	  }
+	vector<wstring> curlines;
+	splitString(reply, curlines, L"\n");
+	utf8_mbstowstring(I->Nick, mynick);
+	for (size_t i = 0, sz = curlines.size(); i < sz; i++) {
+	  char* utf8line = utf8_wstringtombs(curlines[i]);
+	  see_printstring (stdout, L"(%ls) %ls: %ls\n", channel.c_str(), mynick.c_str(), curlines[i].c_str());
+	  BN_SendChannelMessage(I, Chan, utf8line);
+	  safe_free(utf8line);
+	}
   }
 }
 
 
 void ProcOnQuit (BN_PInfo I, const char Who[],const char Msg[]) {
-  char  nickname[4096];
-  char  hostname[4096];
-  char  username[4096];
-  BN_ExtractNick(Who, nickname, sizeof(nickname));
-  BN_ExtractHost(Who, hostname, sizeof(hostname));
-  BN_ExtractExactUserName(Who, username, sizeof(username));
+  char  tempnick[4096];
+  char  temphost[4096];
+  char  tempuser[4096];
+  BN_ExtractNick(Who, tempnick, sizeof(tempnick));
+  BN_ExtractHost(Who, temphost, sizeof(temphost));
+  BN_ExtractExactUserName(Who, tempuser, sizeof(tempuser));
 
-  printf ("%s (%s@%s) has quit IRC (%s)\n", nickname, username, hostname, Msg);
+  wstring nickname, hostname, username, message;
+  utf8_mbstowstring(tempnick, nickname);
+  utf8_mbstowstring(temphost, hostname);
+  utf8_mbstowstring(tempuser, username);
+  utf8_mbstowstring(Msg, message);
+  
+  see_printstring(stdout, L"%ls (%ls@%ls) has quit IRC (%ls)\n", 
+	nickname.c_str(), username.c_str(), hostname.c_str(), message.c_str());
+}
+
+// returned string is freed later by BotNet, so we malloc() the return string each call
+char *ProcOnCTCP(BN_PInfo I,const char Who[],const char Whom[],const char Type[]) {
+  char  tempnick[4096];
+  char  temphost[4096];
+  char  tempuser[4096];
+  BN_ExtractNick(Who, tempnick, sizeof(tempnick));
+  BN_ExtractHost(Who, temphost, sizeof(temphost));
+  BN_ExtractExactUserName(Who, tempuser, sizeof(tempuser));
+
+  wstring nickname, hostname, username, whom, type;
+  utf8_mbstowstring(tempnick, nickname);
+  utf8_mbstowstring(temphost, hostname);
+  utf8_mbstowstring(tempuser, username);
+  utf8_mbstowstring(Whom, whom);
+  utf8_mbstowstring(Type, type);
+  see_printstring(stdout, L"CTCP %ls query by %ls for %ls\n", type.c_str(), nickname.c_str(), whom.c_str());
+
+  wstring replystring;
+  if (!strcasecmp(Type, "VERSION")) {
+	if (!botsettings.stealth) {
+	  replystring = L"SeeBorg v" SEEBORGVERSIONWSTRING;
+	} else {
+	  replystring = botsettings.ctcpversionstring;
+	}
+  }
+
+  return utf8_wstringtombs(replystring);
 }
 
 // Bot Commands body
 // ---------------------------------------------------------------------------
-string ircParseCommands(const string cmd, const char* who) {
-  if (cmd[0] != '!') return "";
-
+wstring ircParseCommands(const wstring &cmd, const char* who) {
+  if (cmd[0] != L'!') return L"";
+  
   if (!isOwner(who)) return ABORT_HACK;
-
-  string command = cmd;
+  // TODO: remove redundant copy
+  wstring command = cmd;
   lowerString(command);
-  CMA_TokenizeString(command.c_str());
+
+  tokenizer_tokenize(botsettings.tokenizer, command.c_str());
+
   for (int i = 0; i < numircbotcmds; i++) {
-	if (!strncmp(CMA_Argv(0) + 1, ircbotcmds[i].command, strlen(ircbotcmds[i].command))) {
-	  return ircbotcmds[i].func(&gSeeBorg, command);
+	size_t len = wcslen(ircbotcmds[i].command);
+	if (!wcsncmp(tokenizer_argv(botsettings.tokenizer, 0) + 1, ircbotcmds[i].command, len)) {
+	  return ircbotcmds[i].func(&gSeeBorg, cmd);
 	}
   }
-  return "";
+  return L"";
 }
 
-string CMD_Shutup_f(class SeeBorg* self, const string command) {
-  if (!botsettings.speaking) return "";
-
+wstring CMD_Shutup_f(class SeeBorg* self, const wstring command) {
+  if (!botsettings.speaking) return L"";
+  
   botsettings.speaking = false;
-  return "I'll shut up... :o";
+  return L"I'll shut up... :o";
 }
 
-string CMD_Wakeup_f(class SeeBorg* self, const string command) {
-  if (botsettings.speaking) return "";
-
+wstring CMD_Wakeup_f(class SeeBorg* self, const wstring command) {
+  if (botsettings.speaking) return L"";
+  
   botsettings.speaking = true;
-  return "Woohoo!";
+  return L"Woohoo!";
 }
 
-string CMD_Save_f(class SeeBorg* self, const string command) {
-  printf ("Saving settings...\n");
+wstring CMD_Save_f(class SeeBorg* self, const wstring command) {
+  see_printstring(stdout, L"Saving settings...\n");
   SaveBotSettings();
   gSeeBorg.SaveSettings();
-  return "okay";
+  return L"done";
 }                                                             
 
-string CMD_Join_f (class SeeBorg* self, const string command) {
-  if (CMA_Argc() < 2) return "";
+wstring CMD_Join_f (class SeeBorg* self, const wstring command) {
+  size_t argc = tokenizer_argc(botsettings.tokenizer);
+  if (argc < 2) return L"";
+  
+  for (size_t i = 1; i < argc; i++) {
+	wstring channel = tokenizer_argv(botsettings.tokenizer, i);
+	char* utf8channel = utf8_wstringtombs(channel);
 
-  for (int i = 1, sz = CMA_Argc(); i < sz; i++) {
-	string channel = CMA_Argv(i);
-	lowerString(channel);
-	printf ("Joining %s...\n", CMA_Argv(i));
-    BN_SendJoinMessage (&Info, CMA_Argv(i), NULL);
-	botsettings.channels.insert(channel);
+	see_printstring(stdout, L"Joining %ls...\n", channel.c_str());
+	BN_SendJoinMessage (&Info, utf8channel, NULL);
+	botsettings.channels.push_back(channel);
+
+	safe_free(utf8channel);
   }
-
-  return "okay";
+  
+  return L"okay";
 }
 
 
-string CMD_Part_f (class SeeBorg* self, const string command) {
-  if (CMA_Argc() < 2) return "";
+wstring CMD_Part_f (class SeeBorg* self, const wstring command) {
+  size_t argc = tokenizer_argc(botsettings.tokenizer);
+  if (argc < 2) return L"";
+  
+  for (size_t i = 1; i < argc; i++) {
+	wstring channel = tokenizer_argv(botsettings.tokenizer, i);
+	char* utf8channel = utf8_wstringtombs(channel);
 
-  for (int i = 1, sz = CMA_Argc(); i < sz; i++) {
-	string channel = CMA_Argv(i);
-	printf ("Leaving %s...\n", CMA_Argv(i));
-    BN_SendPartMessage (&Info, CMA_Argv(i), NULL);
-
-	if (botsettings.channels.find(channel) != botsettings.channels.end()) {
-	  botsettings.channels.erase(botsettings.channels.find(channel));
+	see_printstring(stdout, L"Leaving %ls...\n", channel.c_str());
+	BN_SendPartMessage (&Info, utf8channel, NULL);
+	
+	vector<wstring>::iterator it = botsettings.channels.begin();
+	for (; it != botsettings.channels.end(); ++it) {
+	  if (!wcscasecmp((*it).c_str(), channel.c_str())) {
+		botsettings.channels.erase(it);
+		break;
+	  }
 	}
   }
-
-  return "okay";
+  
+  return L"okay";
 }
 
 
-string CMD_Replyrate_f(class SeeBorg* self, const string command) {
-  static char retstr[4096];
-  if (CMA_Argc() < 2) {
-	snprintf (retstr, 4096, "Reply rate is %.1f%%", botsettings.replyrate);
+wstring CMD_Replyrate_f(class SeeBorg* self, const wstring command) {
+  size_t argc = tokenizer_argc(botsettings.tokenizer);
+  wchar_t retstr[4096];
+  if (argc < 2) {
+	snwprintf (retstr, 4096, L"Reply rate is %.1f%%", botsettings.replyrate);
 	return retstr;
   }
-
-  botsettings.replyrate = atof(CMA_Argv(1));
-  snprintf (retstr, 4096, "Reply rate is set to %.1f%%", botsettings.replyrate);
+  
+  botsettings.replyrate = (float)wcstod(tokenizer_argv(botsettings.tokenizer, 1), NULL);
+  snwprintf (retstr, 4096, L"Reply rate is set to %.1f%%", botsettings.replyrate);
   return retstr;
 }
 
-string CMD_Replynick_f(class SeeBorg* self, const string command) {
-  static char retstr[4096];
-  if (CMA_Argc() < 2) {
-	snprintf (retstr, 4096, "Reply rate to nickname is %.1f%%", botsettings.replyrate_mynick);
+wstring CMD_Replynick_f(class SeeBorg* self, const wstring command) {
+  size_t argc = tokenizer_argc(botsettings.tokenizer);
+  wchar_t retstr[4096];
+  if (argc < 2) {
+	snwprintf (retstr, 4096, L"Reply rate to nickname is %.1f%%", botsettings.replyrate_mynick);
 	return retstr;
   }
-
-  botsettings.replyrate_mynick = atof(CMA_Argv(1));
-  snprintf (retstr, 4096, "Reply rate to nickname is set to %.1f%%", botsettings.replyrate_mynick);
+  
+  botsettings.replyrate_mynick = (float)wcstod(tokenizer_argv(botsettings.tokenizer, 1), NULL);
+  snwprintf (retstr, 4096, L"Reply rate to nickname is set to %.1f%%", botsettings.replyrate_mynick);
   return retstr;
 }
 
-string CMD_Replyword_f(class SeeBorg* self, const string command) {
-  static char retstr[4096];
-  if (CMA_Argc() < 2) {
-	snprintf (retstr, 4096, "Reply rate to magic words is %.1f%%", botsettings.replyrate_magic);
+wstring CMD_Replyword_f(class SeeBorg* self, const wstring command) {
+  size_t argc = tokenizer_argc(botsettings.tokenizer);
+  wchar_t retstr[4096];
+  if (argc < 2) {
+	snwprintf (retstr, 4096, L"Reply rate to magic words is %.1f%%", botsettings.replyrate_magic);
 	return retstr;
   }
-
-  botsettings.replyrate_magic = atof(CMA_Argv(1));
-  snprintf (retstr, 4096, "Reply rate to magic words is set to %.1f%%", botsettings.replyrate_magic);
+  
+  botsettings.replyrate_magic = (float)wcstod(tokenizer_argv(botsettings.tokenizer, 1), NULL);
+  snwprintf (retstr, 4096, L"Reply rate to magic words is set to %.1f%%", botsettings.replyrate_magic);
   return retstr;
 }
 
-string CMD_ircHelp_f(class SeeBorg* self, const string command) {
-  static string retstr;
-  retstr = "IRC SeeBorg commands:\n";
+wstring CMD_ircHelp_f(class SeeBorg* self, const wstring command) {
+  wstring retstr;
+  retstr = L"IRC SeeBorg commands:\n";
   for (int i = 0; i < numircbotcmds; i++) {
-	retstr += "!";
+	retstr += L"!";
 	retstr += ircbotcmds[i].command;
-	retstr += ": ";
+	retstr += L": ";
 	retstr += ircbotcmds[i].description;
-	retstr += "\n";
+	retstr += L"\n";
   }
   retstr += CMD_Help_f(self, command);
-
+  
   return retstr;
 }
 
-
-string CMD_Learning_f(class SeeBorg* self, const string command) {
-  string retstr;
-  if (CMA_Argc() < 2) {
-	retstr = "Learning is ";
-	retstr += (botsettings.learning) ? "enabled" : "disabled";
+wstring CMD_Stealth_f(class SeeBorg* self, const wstring command) {
+  size_t argc = tokenizer_argc(botsettings.tokenizer);
+  wstring retstr;
+  if (argc < 2) {
+	retstr = L"Stealth is ";
+	retstr += (botsettings.stealth) ? L"enabled" : L"disabled";
 	return retstr;
   }
+  
+  botsettings.stealth = wcstol(tokenizer_argv(botsettings.tokenizer, 1), NULL, 10);
+  retstr = L"Stealth is set to ";
+  retstr += (botsettings.stealth) ? L"enabled" : L"disabled";
+  return retstr;
+}
 
-  botsettings.learning = atoi(CMA_Argv(1));
-  retstr = "Learning is set to ";
-  retstr += (botsettings.learning) ? "enabled" : "disabled";
+wstring CMD_Learning_f(class SeeBorg* self, const wstring command) {
+  size_t argc = tokenizer_argc(botsettings.tokenizer);
+  wstring retstr;
+  if (argc < 2) {
+	retstr = L"Learning is ";
+	retstr += (botsettings.learning) ? L"enabled" : L"disabled";
+	return retstr;
+  }
+  
+  botsettings.learning = wcstol(tokenizer_argv(botsettings.tokenizer, 1), NULL, 10);
+  retstr = L"Learning is set to ";
+  retstr += (botsettings.learning) ? L"enabled" : L"disabled";
   return retstr;
 }
 
@@ -692,13 +818,17 @@ void cleanup(void) {
   // handle this only when we are initialized
   if (initialized) {
 	if (connected) {
-	  printf ("Disconnecting from server...\n");
-	  BN_SendQuitMessage(&Info, botsettings.quitmessage.c_str());
+	  char *utf8str = utf8_wstringtombs(botsettings.quitmessage);
+	  see_printstring(stdout, L"Disconnecting from server...\n");
+	  BN_SendQuitMessage(&Info, utf8str);
+	  safe_free(utf8str);
 	}
-	printf ("Saving dictionary...\n");
+	see_printstring(stdout, L"Saving dictionary...\n");
 	gSeeBorg.SaveSettings();
-	printf ("Saving settings...\n");
+	see_printstring(stdout, L"Saving settings...\n");
 	SaveBotSettings();
+	tokenizer_free(botsettings.tokenizer);
+	botsettings.tokenizer = NULL;
   }
 }
 
@@ -725,27 +855,25 @@ void sig_term(int i) {
 
 int main (int argc, char* argv[]) {
   setlocale(LC_ALL, "");
-
-  printf ("SeeBorg v" SEEBORGVERSIONSTRING ", copyright (C) 2003 Eugene Bujak.\n"
-		  "Uses %s\n", BN_GetCopyright());
-
+  
+  see_printstring(stdout, L"SeeBorg v" SEEBORGVERSIONWSTRING L", copyright (C) 2003 Eugene Bujak.\n"
+	L"Uses botnet v%hs\n", BN_GetVersion());
+  
   LoadBotSettings();
   if (argc < 2) {
-    if (botsettings.server.empty()) {
+	if (botsettings.server.empty()) {
 	  SaveBotSettings();
-	  printf ("No server to connect to (check seeborg-irc.cfg)");
+	  see_printstring(stdout, L"No server to connect to (check seeborg-irc.cfg)\n");
 	  return 1;
 	}
   } else {
-	botsettings.server = argv[1];
+	utf8_mbstowstring(argv[1], botsettings.server);
   }
-
-
-  g_argv = argv;
-  g_argc = argc;
-
+  
+  
   memset (&Info, 0, sizeof(Info));
 
+  Info.CB.OnError = ProcOnError;
   Info.CB.OnConnected = ProcOnConnected;
   Info.CB.OnRegistered = ProcOnRegistered;
   Info.CB.OnCTCP = ProcOnCTCP;
@@ -758,10 +886,10 @@ int main (int argc, char* argv[]) {
   Info.CB.OnQuit = ProcOnQuit;
   Info.CB.OnChannelTalk = ProcOnChannelTalk;
   Info.CB.OnPingPong = ProcOnPingPong;
-
-
+  
+  
   srand(time(NULL));
-  printf ("Loading dictionary...\n");
+  see_printstring(stdout, L"Loading dictionary...\n");
   gSeeBorg.LoadSettings();
   signal(SIGINT, sig_term);
   signal(SIGTERM, sig_term);
@@ -771,24 +899,25 @@ int main (int argc, char* argv[]) {
   signal(SIGHUP, sig_term);
 #endif
   atexit(cleanup);
-
+  
   initialized = true;
-  while(BN_Connect(&Info,botsettings.server.c_str(), 6667, 0) != true) {
-	printf ("Disconnected.\n");
+  char* utf8server = utf8_wstringtombs(botsettings.server);
+  while(BN_Connect(&Info, utf8server, botsettings.serverport, 0) != true) {
+	see_printstring(stdout, L"Disconnected.\n");
 #ifdef __unix__
-    sleep(10);
+	sleep(10);
 #elif defined(_WIN32)
-    Sleep(10*1000);
+	Sleep(10*1000);
 #endif
-	printf ("Reconnecting...\n");
+	see_printstring(stdout, L"Reconnecting...\n");
   }
+  safe_free (utf8server);
   return 0;
 }
 
 // Emacs editing variables
 // ---------------------------------------------------------------------------
-
 /*
- * Local variables:
- *  tab-width: 4 
+** Local variables:
+**  tab-width: 4 
 */

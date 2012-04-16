@@ -152,10 +152,13 @@
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Profile VTune|Win32'">%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <ClCompile Include="..\utf8.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\required.h" />
     <ClInclude Include="..\seeborg.h" />
     <ClInclude Include="..\seeutil.h" />
+    <ClInclude Include="..\utf8.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
