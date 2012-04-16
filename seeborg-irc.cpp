@@ -140,67 +140,70 @@ static configsetting_t configsettings[] = {
 
 static int numconfigsettings = sizeof(configsettings) / sizeof(configsettings[0]) - 1;
 
+
+//TODO: Restructure code to remove continue statements
 void LoadBotSettings() {
   string str;
   FILE* f = fopen ("seeborg-irc.cfg", "r");
   if (f == NULL) return;
 
-  while (fReadStringLine (f, str)) {
-	trimString(str);
-	if (str[0] == ';') continue;
-	if (str[0] == '#') continue;
-	if (str.empty()) continue;
+  while (fReadStringLine (f, str))
+  {
+	  trimString(str);
+	  if (str[0] == ';') continue;
+	  if (str[0] == '#') continue;
+	  if (str.empty()) continue;
 
-	vector<string> cursetting;
+	  vector<string> cursetting;
 
-	if (splitString (str, cursetting, "=") < 2) continue;
+	  if (splitString (str, cursetting, "=") < 2) continue;
 
-	trimString(cursetting[0]);
-	trimString(cursetting[1]);
-	if (!strcasecmp(cursetting[0].c_str(), "channels"))	{
-	  vector<string> cursplit;
-	  if (!splitString (cursetting[1], cursplit, " ")) continue;
-	  botsettings.channels.clear();
-	  for (int i = 0, sz = cursplit.size(); i < sz; i++) {
-		lowerString(cursplit[i]);
-		botsettings.channels.insert(cursplit[i]);
+	  trimString(cursetting[0]);
+	  trimString(cursetting[1]);
+	  if (!strcasecmp(cursetting[0].c_str(), "channels"))	{
+	    vector<string> cursplit;
+	    if (!splitString (cursetting[1], cursplit, " ")) continue;
+	    botsettings.channels.clear();
+	    for (int i = 0, sz = cursplit.size(); i < sz; i++) {
+		  lowerString(cursplit[i]);
+		  botsettings.channels.insert(cursplit[i]);
+	    }
 	  }
-	}
 
-	if (!strcasecmp(cursetting[0].c_str(), "owners"))	{
-	  vector<string> cursplit;
-	  if (!splitString (cursetting[1], cursplit, " ")) continue;
-	  botsettings.owners.clear();
-	  for (int i = 0, sz = cursplit.size(); i < sz; i++) {
-		ircbotowner_t	ircbotowner;
-		ircbotowner.nickname = cursplit[i];
-		botsettings.owners.push_back(ircbotowner);
+	  if (!strcasecmp(cursetting[0].c_str(), "owners"))	{
+	    vector<string> cursplit;
+	    if (!splitString (cursetting[1], cursplit, " ")) continue;
+	    botsettings.owners.clear();
+	    for (int i = 0, sz = cursplit.size(); i < sz; i++) {
+		  ircbotowner_t	ircbotowner;
+		  ircbotowner.nickname = cursplit[i];
+		  botsettings.owners.push_back(ircbotowner);
+	    }
 	  }
-	}
 
-	if (!strcasecmp(cursetting[0].c_str(), "magicwords"))	{
-	  vector<string> cursplit;
-	  if (!splitString (cursetting[1], cursplit, " ")) continue;
-	  botsettings.magicwords.clear();
-	  for (int i = 0, sz = cursplit.size(); i < sz; i++) {
-		botsettings.magicwords.push_back(cursplit[i]);
+	  if (!strcasecmp(cursetting[0].c_str(), "magicwords"))	{
+	    vector<string> cursplit;
+	    if (!splitString (cursetting[1], cursplit, " ")) continue;
+	    botsettings.magicwords.clear();
+	    for (int i = 0, sz = cursplit.size(); i < sz; i++) {
+		  botsettings.magicwords.push_back(cursplit[i]);
+	    }
 	  }
-	}
 
-	for (int i = 0; i < numconfigsettings; i++) {
-	  configsetting_t* s = &configsettings[i];
-	  if (s->configline == NULL) continue;
-	  if (!strcasecmp(s->configline, cursetting[0].c_str())) {
-		if (s->stringptr != NULL) {
-		  *s->stringptr = cursetting[1];
-		} else if (s->floatptr != NULL) {
-		  *s->floatptr = atof(cursetting[1].c_str());
-		} else if (s->intptr != NULL) {
-		  *s->intptr = atoi(cursetting[1].c_str());
-		}
-		break;
+	  for (int i = 0; i < numconfigsettings; i++) {
+	    configsetting_t* s = &configsettings[i];
+	    if (s->configline == NULL) continue;
+	    if (!strcasecmp(s->configline, cursetting[0].c_str())) {
+		  if (s->stringptr != NULL) {
+		    *s->stringptr = cursetting[1];
+		  } else if (s->floatptr != NULL) {
+		    *s->floatptr = atof(cursetting[1].c_str());
+		  } else if (s->intptr != NULL) {
+		    *s->intptr = atoi(cursetting[1].c_str());
+		  }
+		  break;
+	    }
 	  }
-	}
   }
   fclose(f);
 }
