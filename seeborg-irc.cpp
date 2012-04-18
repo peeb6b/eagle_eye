@@ -92,51 +92,59 @@ void LoadBotSettings() {
   if (f == NULL) return;
   
   while (fReadStringLine (f, str)) {
-	trimString(str, false);
-	// skip comments
-	if (str[0] == L';') continue;
-	if (str[0] == L'#') continue;
-	if (str.empty()) continue;
+	  trimString(str, false);
+	  // skip comments
+    if (!str.empty()) //Avoid accessing an empty str
+    { 
+      if ( (str[0] != L';') && (str[0] != L'#') ) //Ignore comments in .cfg
+      {
+	      vector<wstring> cursetting;
+	      if (splitString (str, cursetting, L"=") < 2) continue;
+	      trimString(cursetting[0], false);
+	      trimString(cursetting[1], false);
 	
-	vector<wstring> cursetting;
-	if (splitString (str, cursetting, L"=") < 2) continue;
-	trimString(cursetting[0], false);
-	trimString(cursetting[1], false);
-	
-	// Owner list, special case for parsing
-	if (!wcscasecmp(cursetting[0].c_str(), L"owners")) {
-	  vector<wstring> cursplit;
-	  splitString(cursetting[1], cursplit);
-	  botsettings.owners.clear();
-	  for (int i = 0, sz = cursplit.size(); i < sz; i++) {
-		ircbotowner_t ircbotowner;
-		ircbotowner.nickname = cursplit[i];
-		botsettings.owners.push_back(ircbotowner);
-	  }
-	  continue;
-	}
+	      // Owner list, special case for parsing
+	      if (!wcscasecmp(cursetting[0].c_str(), L"owners")) {
+	        vector<wstring> cursplit;
+	        splitString(cursetting[1], cursplit);
+	        botsettings.owners.clear();
+	        for (int i = 0, sz = cursplit.size(); i < sz; i++) {
+		      ircbotowner_t ircbotowner;
+		      ircbotowner.nickname = cursplit[i];
+		      botsettings.owners.push_back(ircbotowner);
+	        }
+	        continue;
+	      }
 
-	// Go through non-special entries
-	for (int i = 0; i < numconfigsettings; i++) {
-	  const configsetting_t* s = &configsettings[i];
-	  if (s->configline == NULL) continue;
-	  if (!wcscasecmp(s->configline, cursetting[0].c_str())) {
-		if (s->stringptr != NULL) {
-		  *s->stringptr = cursetting[1];
-		}
-		if (s->floatptr != NULL) {
-		  *s->floatptr = (float)wcstod(cursetting[1].c_str(), NULL);
-		}
-		if (s->intptr != NULL) {
-		  *s->intptr = wcstol(cursetting[1].c_str(), NULL, 10);
-		}
-		if (s->stringvectorptr != NULL) {
-		  s->stringvectorptr->clear();
-		  splitString(cursetting[1], *(s->stringvectorptr));
-		}
-		break;
-	  }
-	}
+	      // Go through non-special entries
+	      for (int i = 0; i < numconfigsettings; i++) 
+        {
+	        const configsetting_t* s = &configsettings[i];
+	        if (s->configline == NULL) continue;
+	        if (!wcscasecmp(s->configline, cursetting[0].c_str()))
+          {
+		        if (s->stringptr != NULL)
+            {
+		          *s->stringptr = cursetting[1];
+		        }
+		        if (s->floatptr != NULL)
+            {
+		          *s->floatptr = (float)wcstod(cursetting[1].c_str(), NULL);
+		        }
+		        if (s->intptr != NULL) 
+            {
+		          *s->intptr = wcstol(cursetting[1].c_str(), NULL, 10);
+		        }
+		        if (s->stringvectorptr != NULL)
+            {
+		          s->stringvectorptr->clear();
+		          splitString(cursetting[1], *(s->stringvectorptr));
+		        }
+		        break;
+	        }
+	      }
+    }
+  }
   }
   fclose(f);
 }

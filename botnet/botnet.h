@@ -12,7 +12,7 @@
 #include <sys/types.h>
 #include <errno.h>
 #ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN //This kills linking errors!
 #include <winsock.h> /* HMage: was <winsock2.h> */
 #else
 #include <sys/socket.h>

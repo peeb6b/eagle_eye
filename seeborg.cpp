@@ -46,7 +46,7 @@ int SeeBorg::LoadSettings(void) {
 		return false;
 	}
 	
-	while (fReadStringLine (f, str)) {
+	while (fReadStringLine (f, str)) {  //For some reason this won't read my whole lines file
 		this->Learn(str);
 	}
 	fclose(f);
@@ -70,6 +70,7 @@ int SeeBorg::SaveSettings(void) {
 	
 	utf8writer_t *utf8writer = utf8writer_init();
 	if (utf8writer == NULL) {
+    perror("Couldn't initialize UTF8 Writer!");
 		// TODO: write error
 		fclose(f);
 		return false;
