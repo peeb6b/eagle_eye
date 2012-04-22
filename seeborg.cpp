@@ -199,7 +199,7 @@ wstring SeeBorg::Reply(IN const wstring inmsg) {
 
 int SeeBorg::Learn(const wstring &body) {
 	// Ignore quotes
-	if (iswdigit(body[0])) return false;
+	if (iswdigit(body[0])) return false; //What does this do?
 	if (body[0] == L'<') return false;
 	if (body[0] == L'[') return false;
 	
