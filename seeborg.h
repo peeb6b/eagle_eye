@@ -30,6 +30,8 @@
 #include <set>
 #include <deque>
 
+#include "utf8.h"
+
 typedef struct botcommand_s {
 	const wchar_t* command;
 	const wchar_t* description;
