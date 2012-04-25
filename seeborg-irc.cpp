@@ -117,32 +117,32 @@ void LoadBotSettings() {
 	      }
 
 	      // Go through non-special entries
-	      for (int i = 0; i < numconfigsettings; i++) 
-        {
-	        const configsetting_t* s = &configsettings[i];
-	        if (s->configline == NULL) continue;
-	        if (!wcscasecmp(s->configline, cursetting[0].c_str()))
-          {
-		        if (s->stringptr != NULL)
-            {
-		          *s->stringptr = cursetting[1];
-		        }
-		        if (s->floatptr != NULL)
-            {
-		          *s->floatptr = (float)wcstod(cursetting[1].c_str(), NULL);
-		        }
-		        if (s->intptr != NULL) 
-            {
-		          *s->intptr = wcstol(cursetting[1].c_str(), NULL, 10);
-		        }
-		        if (s->stringvectorptr != NULL)
-            {
-		          s->stringvectorptr->clear();
-		          splitString(cursetting[1], *(s->stringvectorptr));
-		        }
-		        break;
-	        }
+		for (int i = 0; i < numconfigsettings; i++) 
+		{
+	    const configsetting_t* s = &configsettings[i];
+	    if (s->configline == NULL) continue;
+	    if (!wcscasecmp(s->configline, cursetting[0].c_str()))
+			{
+		    if (s->stringptr != NULL)
+				{
+		      *s->stringptr = cursetting[1];
+		    }
+		    if (s->floatptr != NULL)
+				{
+		      *s->floatptr = (float)wcstod(cursetting[1].c_str(), NULL);
+		    
+		      if (s->intptr != NULL) 
+				  {
+		        *s->intptr = wcstol(cursetting[1].c_str(), NULL, 10);
+		      }
+		      if (s->stringvectorptr != NULL)
+				  {
+		        s->stringvectorptr->clear();
+		        splitString(cursetting[1], *(s->stringvectorptr));
+		      }
+		      break;
 	      }
+	    }
     }
   }
   }
