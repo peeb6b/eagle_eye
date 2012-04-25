@@ -147,6 +147,7 @@ void LoadBotSettings() {
   }
   }
   fclose(f);
+  }
 }
 
 void SaveBotSettings() {
