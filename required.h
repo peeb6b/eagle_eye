@@ -99,9 +99,9 @@ typedef unsigned __int64 uint64_t;
 
 
 #define SEEBORGVERSIONMAJOR 0
-#define SEEBORGVERSIONMINOR 52
-#define SEEBORGVERSIONWSTRING L"0.52 beta"
-#define SEEBORGVERSIONSTRING "0.52 beta"
+#define SEEBORGVERSIONMINOR 10
+#define SEEBORGVERSIONWSTRING L"0.10 beta"
+#define SEEBORGVERSIONSTRING "0.10 beta"
 
 #ifndef IN
 #define IN

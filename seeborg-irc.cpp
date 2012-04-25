@@ -864,7 +864,7 @@ void sig_term(int i) {
 int main (int argc, char* argv[]) {
   setlocale(LC_ALL, "");
   
-  see_printstring(stdout, L"SeeBorg v" SEEBORGVERSIONWSTRING L", copyright (C) 2003 Eugene Bujak.\n"
+  see_printstring(stdout, L"Eagle_Eye v" SEEBORGVERSIONWSTRING L",  Seeborg fork\n"
 	L"Uses botnet v%hs\n", BN_GetVersion());
   
   LoadBotSettings();
