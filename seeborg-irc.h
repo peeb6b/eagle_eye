@@ -54,7 +54,7 @@ static botcommand_t ircbotcmds[] = {
   {L"replymagic", L"Show/set magic word reply rate", CMD_Replyword_f},
 
   {L"quit", L"As the name implies", CMD_Quit_f},
-  {L"save", L"Immedeately save dictionary and settings", CMD_Save_f},
+  {L"save", L"Immediately save dictionary and settings", CMD_Save_f},
   
   {L"learning", L"Enable/disable bot's learning ability, should be enabled", CMD_Learning_f},
   {L"stealth", L"CTCP version stealth", CMD_Stealth_f},
