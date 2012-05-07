@@ -148,6 +148,8 @@ int FilterMessage(wstring &message) {
 
 // Reads string from file until we reach EOF or newline
 // ---
+/// Pre:  
+/// Post: Returns
 int fReadStringLine(IN FILE *f, OUT wstring &str) {
   size_t blocksize = 65536;
   size_t blockoffset = 0;
@@ -165,16 +167,19 @@ int fReadStringLine(IN FILE *f, OUT wstring &str) {
   
   s[blocksize-1] = 104; // if touched by fgets(), we may need more
   
-  while (1) {
-	if (fgets (s + blockoffset, blocksize - blockoffset, f) == NULL) {
-	  // An error
-	  if (!feof(f)) perror("error reading lines database");
-	  safe_free(s);
-	  return false;
-	}
+  while (1) 
+  {
+	  if (fgets (s + blockoffset, blocksize - blockoffset, f) == NULL)
+    {
+	    // An error
+	    if (!feof(f)) perror("error reading lines database");
+	    safe_free(s);
+	    return false;
+	  }
 	
-	if (s[blocksize-1] == 104) break;
-	else {
+	  if (s[blocksize-1] == 104) break; //TODO: structure this better
+	  else 
+    {
 	  // was touched, probably requires another take
 	  blockoffset = blocksize - 1;
 	  blocksize *= 2;
@@ -184,6 +189,7 @@ int fReadStringLine(IN FILE *f, OUT wstring &str) {
   }
   
   // convert from UTF8 to wchar_t
+  // TODO: can we just use UTF8 through the whole program?
   retval = utf8_mbstowcs(NULL, s, 0);
   if (retval < 0) {
 	safe_free(s);

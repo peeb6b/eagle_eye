@@ -22,6 +22,7 @@
 #define __SEEBORG_REQUIRED_H__
 
 #ifdef _MSC_VER
+#pragma warning (disable: 4996)
 #pragma warning (disable: 4786)
 #pragma warning (disable: 4503)
 #pragma warning (disable: 4786)
