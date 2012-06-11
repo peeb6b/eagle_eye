@@ -91,62 +91,62 @@ void LoadBotSettings() {
   FILE* f = fopen ("seeborg-irc.cfg", "r");  // r opens the file for reading
   if (f != NULL)  //We opened the file
   {
+    // Only reads the first line.  Why?
     while (fReadStringLine (f, str)) {
-	    trimString(str, false);
-	    // skip comments
-      if (!str.empty()) //Avoid accessing an empty str
-      { 
-        if ( (str[0] != L';') && (str[0] != L'#') ) //Ignore comments in .cfg
+      trimString(str, false);
+//      if (!str.empty()) //Avoid accessing an empty str
+//      { 
+        if ( (str[0] != L';') && (str[0] != L'#') && (!str.empty()) ) //Ignore comments in .cfg
         {
-	        vector<wstring> cursetting;
-	        if (splitString (str, cursetting, L"=") < 2) continue;
-	        trimString(cursetting[0], false);
-	        trimString(cursetting[1], false);
-	
-	        // Owner list, special case for parsing
-	        if (!wcscasecmp(cursetting[0].c_str(), L"owners")) {
-	          vector<wstring> cursplit;
-	          splitString(cursetting[1], cursplit);
-	          botsettings.owners.clear();
-	          for (int i = 0, sz = cursplit.size(); i < sz; i++) {
-		        ircbotowner_t ircbotowner;
-		        ircbotowner.nickname = cursplit[i];
-		        botsettings.owners.push_back(ircbotowner);
-	          }
-	          continue;
-	        }
+          vector<wstring> cursetting;
+          if (splitString (str, cursetting, L"=") < 2) continue;
+          trimString(cursetting[0], false);
+          trimString(cursetting[1], false);
 
-	        // Go through non-special entries
-		  for (int i = 0; i < numconfigsettings; i++) 
-		  {
-	      const configsetting_t* s = &configsettings[i];
-	      if (s->configline == NULL) continue;
-	      if (!wcscasecmp(s->configline, cursetting[0].c_str()))
-			  {
-		      if (s->stringptr != NULL)
-				  {
-		        *s->stringptr = cursetting[1];
-		      }
-		      if (s->floatptr != NULL)
-				  {
-		        *s->floatptr = (float)wcstod(cursetting[1].c_str(), NULL);
-		    
-		        if (s->intptr != NULL) 
-				    {
-		          *s->intptr = wcstol(cursetting[1].c_str(), NULL, 10);
-		        }
-		        if (s->stringvectorptr != NULL)
-				    {
-		          s->stringvectorptr->clear();
-		          splitString(cursetting[1], *(s->stringvectorptr));
-		        }
-		        break;
-	        }
-	      }
-      }
-    }
-    }
-    fclose(f);
+          // Owner list, special case for parsing
+          if (!wcscasecmp(cursetting[0].c_str(), L"owners")) {
+            vector<wstring> cursplit;
+            splitString(cursetting[1], cursplit);
+            botsettings.owners.clear();
+            for (int i = 0, sz = cursplit.size(); i < sz; i++) {
+              ircbotowner_t ircbotowner;
+              ircbotowner.nickname = cursplit[i];
+              botsettings.owners.push_back(ircbotowner);
+            }
+            continue;
+          }
+
+          // Go through non-special entries
+          for (int i = 0; i < numconfigsettings; i++) 
+          {
+            const configsetting_t* s = &configsettings[i];
+            if (s->configline == NULL) continue;
+            if (!wcscasecmp(s->configline, cursetting[0].c_str()))
+            {
+              if (s->stringptr != NULL)
+              {
+                *s->stringptr = cursetting[1];
+              }
+              if (s->floatptr != NULL)
+              {
+                *s->floatptr = (float)wcstod(cursetting[1].c_str(), NULL);
+
+                if (s->intptr != NULL) 
+                {
+                  *s->intptr = wcstol(cursetting[1].c_str(), NULL, 10);
+                }
+                if (s->stringvectorptr != NULL)
+                {
+                  s->stringvectorptr->clear();
+                  splitString(cursetting[1], *(s->stringvectorptr));
+                }
+                break;
+              }
+            }
+          }
+        }
+      //}
+      fclose(f);
     }
   }
 }
@@ -870,14 +870,18 @@ int main (int argc, char* argv[]) {
 	L"Uses botnet v%hs\n", BN_GetVersion());
   
   LoadBotSettings();
-  if (argc < 2) {
-	if (botsettings.server.empty()) {
-	  SaveBotSettings();
-	  see_printstring(stdout, L"No server to connect to (check seeborg-irc.cfg)\n");
-	  return 1;
-	}
-  } else {
-	utf8_mbstowstring(argv[1], botsettings.server);
+  if (argc < 2)
+  {
+	  if (botsettings.server.empty())
+    {
+	    SaveBotSettings();
+	    see_printstring(stdout, L"No server to connect to (check seeborg-irc.cfg)\n");
+	    return 1;
+	  }
+  } 
+  else
+  {
+	  utf8_mbstowstring(argv[1], botsettings.server);
   }
   
   

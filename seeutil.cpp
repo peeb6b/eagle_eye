@@ -119,29 +119,29 @@ int trimString(wstring &str, bool punct) {
 int FilterMessage(wstring &message) {
   int n;	// MSVC doesn't like 'for' locality
   for (n = message.find(L'\t'); n != message.npos; n = message.find(L'\t', n)) {
-	message.replace(n, 1, 1, L' ');
+    message.replace(n, 1, 1, L' ');
   }
 
   for (n = message.find(L'\n'); n != message.npos; n = message.find(L'\n', n)) {
-	message.erase(n, 1);
+    message.erase(n, 1);
   }
-  
+
   for (n = message.find(L'\r'); n != message.npos; n = message.find(L'\r', n)) {
-	message.erase(n, 1);
+    message.erase(n, 1);
   }
-  
+
   for (n = message.find(L'\"'); n != message.npos; n = message.find(L'\"', n)) {
-	message.erase(n, 1);
+    message.erase(n, 1);
   }
-  
+
   for (n = message.find(L"? "); n != message.npos; n = message.find(L"? ", n)) {
-	message.replace(n, 2, L"?. ");
+    message.replace(n, 2, L"?. ");
   }
-  
+
   for (n = message.find(L"! "); n != message.npos; n = message.find(L"! ", n)) {
-	message.replace(n, 2, L"!. ");
+    message.replace(n, 2, L"!. ");
   }
-  
+
   lowerString (message);
   return true;
 }
@@ -156,55 +156,55 @@ int fReadStringLine(IN FILE *f, OUT wstring &str) {
   wchar_t *wcstr = NULL;
   char *s = NULL;
   int retval;
-  
+
   if (f == NULL) return false;
-//  str.erase(0, str.npos);
+  //  str.erase(0, str.npos);
   str.clear();
-//  str.resize(0);
-  
-  s = (char*)malloc(blocksize);
+  //  str.resize(0);
+
+  s = (char*)malloc(blocksize); // TODO: replace with new
   if (s == NULL) return false; // error;
-  
+
   s[blocksize-1] = 104; // if touched by fgets(), we may need more
-  
+
   while (1) 
   {
-	  if (fgets (s + blockoffset, blocksize - blockoffset, f) == NULL)
+    if (fgets (s + blockoffset, blocksize - blockoffset, f) == NULL)
     {
-	    // An error
-	    if (!feof(f)) perror("error reading lines database");
-	    safe_free(s);
-	    return false;
-	  }
-	
-	  if (s[blocksize-1] == 104) break; //TODO: structure this better
-	  else 
+      // An error
+      if (!feof(f)) perror("error reading lines database");
+      safe_free(s);
+      return false;
+    }
+
+    if (s[blocksize-1] == 104) break; //TODO: structure this better
+    else 
     {
-	  // was touched, probably requires another take
-	  blockoffset = blocksize - 1;
-	  blocksize *= 2;
-	  s = (char*)realloc(s, (blocksize));
-	  s[blocksize-1] = 104;
-	}
+      // was touched, probably requires another take
+      blockoffset = blocksize - 1;
+      blocksize *= 2;
+      s = (char*)realloc(s, (blocksize));
+      s[blocksize-1] = 104;
+    }
   }
-  
+
   // convert from UTF8 to wchar_t
   // TODO: can we just use UTF8 through the whole program?
   retval = utf8_mbstowcs(NULL, s, 0);
   if (retval < 0) {
-	safe_free(s);
-	return false;
+    safe_free(s);
+    return false;
   }
   wcstr = (wchar_t*)malloc((retval+1)*sizeof(wchar_t));
   retval = utf8_mbstowcs(wcstr, s, retval+1);
   if (retval < 0) {
-	safe_free (wcstr);
-	safe_free (s);
-	return false;
+    safe_free (wcstr);
+    safe_free (s);
+    return false;
   }
-  
+
   str = wcstr;
-  
+
   safe_free(wcstr);
   safe_free(s);
   return true;
