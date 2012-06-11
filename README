@@ -20,7 +20,8 @@ Instructions to build eagle_eye:
 
 
 Windows:
-Currently having issues with VS 2010
+Open the seeborg.sln file under the VSFiles directory.
+Build solution
 
 
 Linux:
