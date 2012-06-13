@@ -92,7 +92,7 @@ void LoadBotSettings() {
   if (f != NULL)  //We opened the file
   {
     // Only reads the first line.  Why?
-    while (fReadStringLine (f, str)) {
+    while ( fReadStringLine (f, str) ) {
       trimString(str, false);
 //      if (!str.empty()) //Avoid accessing an empty str
 //      { 
